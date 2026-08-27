@@ -3,50 +3,31 @@ from bs4 import BeautifulSoup
 import csv
 import time
 
-# CONFIG
-
-BASE_URL = "https://steamcommunity.com/app/866020/homecontent/"
+BASE_URL = "https://steamcommunity.com/app/1665460/homecontent/"
 
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/137.0.0.0 Safari/537.36"
-    )
+    "User-Agent": "Mozilla/5.0"
 }
 
-OUTPUT_FILE = "dataset/steam_GT_reviews.csv"
+OUTPUT_FILE = "dataset/tester/steam_EFootball_reviews.csv"
 
 unique_reviews = set()
-
-# Gunakan Session agar request lebih stabil
-session = requests.Session()
-session.headers.update(HEADERS)
-
-# =========================================
-# PARAMETER AWAL
-# =========================================
 
 cursor = None
 page = 1
 offset = 0
 
-# =========================================
-# CSV
-# =========================================
-
 with open(
     OUTPUT_FILE,
     mode="w",
     newline="",
-    encoding="utf-8-sig"
+    encoding="utf-8"
 ) as file:
 
     writer = csv.writer(file)
 
     writer.writerow([
         "Author",
-        "Game Title",
         "Profile URL",
         "Tanggal",
         "Review"
@@ -59,6 +40,7 @@ with open(
         params = {
 
             "userreviewsoffset": offset,
+
             "p": page,
 
             "workshopitemspage": page,
@@ -92,34 +74,19 @@ with open(
         if cursor is not None:
             params["userreviewscursor"] = cursor
 
-        # =========================================
-        # REQUEST
-        # =========================================
-
-        response = session.get(
+        response = requests.get(
             BASE_URL,
             params=params,
-            timeout=30
+            headers=HEADERS
         )
 
         if response.status_code != 200:
-            print("Request gagal :", response.status_code)
+            print("Request gagal.")
             break
 
-        print("=" * 60)
-        print("Encoding  :", response.encoding)
-        print("Apparent  :", response.apparent_encoding)
-        print("Content-Type :", response.headers.get("Content-Type"))
-        print("=" * 60)
-
-        # Pakai encoding yang dideteksi
-        response.encoding = response.apparent_encoding
-
-        # Parse dari byte asli
         soup = BeautifulSoup(
-            response.content,
-            "html.parser",
-            from_encoding=response.encoding
+            response.text,
+            "html.parser"
         )
 
         reviews = soup.find_all(
@@ -137,9 +104,8 @@ with open(
         # LOOP REVIEW
         # =====================================
 
-        for index, review in enumerate(reviews):
+        for review in reviews:
 
-            author_game = "Growtopia"
             author_name = "-"
             author_url = "-"
 
@@ -153,7 +119,7 @@ with open(
                 author_link = author_block.find("a")
 
                 if author_link:
-                    author_name = author_link.get_text(strip=True)
+                    author_name = author_link.text.strip()
                     author_url = author_link.get("href", "-")
 
             posted_date = "-"
@@ -172,25 +138,14 @@ with open(
                 )
 
                 if date:
-                    posted_date = date.get_text(strip=True)
+                    posted_date = date.text.strip()
                     date.extract()
-
-                # Debug HTML hanya sekali
-                if page == 1 and index == 0:
-                    print("\n========== RAW HTML ==========")
-                    print(content.prettify())
-                    print("==============================\n")
+                    
 
                 review_text = content.get_text(
                     separator=" ",
                     strip=True
                 )
-
-                # Debug hasil akhir hanya sekali
-                if page == 1 and index == 0:
-                    print("========== REVIEW ==========")
-                    print(repr(review_text))
-                    print("============================\n")
 
             unique_key = (
                 author_name,
@@ -204,7 +159,6 @@ with open(
 
             writer.writerow([
                 author_name,
-                author_game,
                 author_url,
                 posted_date,
                 review_text
@@ -213,7 +167,7 @@ with open(
             print("Saved :", author_name)
 
         # =====================================
-        # CURSOR BERIKUTNYA
+        # AMBIL CURSOR BERIKUTNYA
         # =====================================
 
         cursor_input = soup.find(
@@ -231,12 +185,15 @@ with open(
             {"name": "p"}
         )
 
+        # Jika cursor tidak ada berarti review habis
         if cursor_input is None:
             print("\nReview terakhir telah dicapai.")
             break
 
         cursor = cursor_input["value"]
+
         offset = int(offset_input["value"])
+
         page = int(page_input["value"])
 
         print(f"Next Cursor : {cursor}")
